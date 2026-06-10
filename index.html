@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Учёт должников</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f0f2f5;--card:#fff;--primary:#1a56db;--primary-light:#e8edfb;
+  --danger:#dc2626;--danger-light:#fef2f2;--danger-bg:#fee2e2;
+  --warn:#d97706;--warn-light:#fffbeb;--warn-bg:#fef3c7;
+  --success:#16a34a;--success-light:#f0fdf4;--success-bg:#dcfce7;
+  --text:#1e293b;--text2:#64748b;--border:#e2e8f0;
+  --shadow:0 1px 3px rgba(0,0,0,.1);--radius:12px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.container{max-width:900px;margin:0 auto;padding:12px}
+header{background:linear-gradient(135deg,#1e3a5f,#1a56db);color:#fff;padding:18px 20px;text-align:center;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+header h1{font-size:1.3rem;font-weight:700;letter-spacing:.5px}
+header p{font-size:.8rem;opacity:.8;margin-top:2px}
+
+.tabs{display:flex;background:var(--card);border-radius:var(--radius);margin:12px 0;padding:4px;box-shadow:var(--shadow);gap:4px}
+.tab{flex:1;padding:10px 6px;text-align:center;border:none;background:none;font-size:.85rem;font-weight:600;color:var(--text2);cursor:pointer;border-radius:8px;transition:.2s}
+.tab.active{background:var(--primary);color:#fff}
+.tab .badge{display:inline-block;background:var(--danger);color:#fff;font-size:.65rem;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:top}
+
+.card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
+.card h2{font-size:1rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.stat{background:var(--card);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);text-align:center}
+.stat .label{font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.stat .value{font-size:1.4rem;font-weight:800;margin-top:4px}
+.stat.danger .value{color:var(--danger)}
+.stat.success .value{color:var(--success)}
+.stat.warn .value{color:var(--warn)}
+.stat.info .value{color:var(--primary)}
+
+.chart-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.chart-card{background:var(--card);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);display:flex;align-items:center;gap:12px}
+.chart-card .ring{position:relative;width:56px;height:56px;flex-shrink:0}
+.chart-card .ring svg{width:56px;height:56px;transform:rotate(-90deg)}
+.chart-card .ring-bg{fill:none;stroke:#e5e7eb;stroke-width:5}
+.chart-card .ring-fill{fill:none;stroke-width:5;stroke-linecap:round;transition:stroke-dashoffset .6s ease}
+.chart-card .ring-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:.85rem;font-weight:800}
+.chart-card .chart-info{flex:1;min-width:0}
+.chart-card .chart-title{font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;font-weight:600}
+.chart-card .chart-value{font-size:1rem;font-weight:800;margin-top:2px}
+.chart-card .chart-sub{font-size:.7rem;color:var(--text2);margin-top:1px}
+
+.alert{padding:12px 14px;border-radius:10px;margin-bottom:10px;font-size:.85rem;display:flex;align-items:flex-start;gap:10px}
+.alert.danger{background:var(--danger-bg);color:#991b1b;border-left:4px solid var(--danger)}
+.alert.warn{background:var(--warn-bg);color:#92400e;border-left:4px solid var(--warn)}
+.alert .icon{font-size:1.2rem;flex-shrink:0}
+
+.debt-list{display:flex;flex-direction:column;gap:8px}
+.debt-item{border:1px solid var(--border);border-radius:10px;padding:12px;transition:.2s;position:relative}
+.debt-item:hover{box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.debt-item.overdue{border-left:4px solid var(--danger);background:var(--danger-light)}
+.debt-item.soon{border-left:4px solid var(--warn);background:var(--warn-light)}
+.debt-item.closed{border-left:4px solid var(--success);background:var(--success-light);opacity:.7}
+.debt-item .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.debt-item .name{font-weight:700;font-size:.95rem}
+.debt-item .amount{font-weight:800;font-size:1.05rem}
+.debt-item .meta{font-size:.75rem;color:var(--text2);display:flex;gap:12px;flex-wrap:wrap}
+.debt-item .status{display:inline-block;padding:2px 8px;border-radius:6px;font-size:.7rem;font-weight:700;text-transform:uppercase}
+.debt-item .status.s-overdue{background:var(--danger);color:#fff}
+.debt-item .status.s-open{background:var(--warn);color:#fff}
+.debt-item .status.s-closed{background:var(--success);color:#fff}
+.debt-item .actions{display:flex;gap:6px;margin-top:8px}
+
+.client-item{border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;justify-content:space-between;align-items:center;transition:.2s}
+.client-item:hover{box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.client-item.risky{border-left:4px solid var(--danger);background:var(--danger-light)}
+.client-info .cname{font-weight:700;font-size:.95rem}
+.client-info .cphone{font-size:.8rem;color:var(--text2)}
+.client-right{text-align:right}
+.client-right .cdebt{font-weight:700;font-size:.95rem}
+.client-right .crating{font-size:.75rem;margin-top:2px}
+.risk-badge{background:var(--danger);color:#fff;font-size:.65rem;padding:2px 6px;border-radius:6px;font-weight:700;margin-left:6px}
+
+.search{position:relative;margin-bottom:12px}
+.search input{width:100%;padding:10px 14px 10px 38px;border:2px solid var(--border);border-radius:10px;font-size:.9rem;outline:none;transition:.2s}
+.search input:focus{border-color:var(--primary)}
+.search::before{content:"🔍";position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:1rem}
+
+.btn{padding:8px 16px;border:none;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:4px}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:#1544b5}
+.btn-success{background:var(--success);color:#fff}
+.btn-success:hover{background:#15803d}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{background:#b91c1c}
+.btn-outline{background:none;border:1.5px solid var(--border);color:var(--text2)}
+.btn-outline:hover{border-color:var(--primary);color:var(--primary)}
+.btn-sm{padding:5px 10px;font-size:.72rem}
+.btn-fab{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:var(--primary);color:#fff;font-size:1.8rem;border:none;box-shadow:0 4px 12px rgba(26,86,219,.4);cursor:pointer;z-index:90;display:flex;align-items:center;justify-content:center}
+
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:var(--card);border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:500px;max-height:85vh;overflow-y:auto;animation:slideUp .3s}
+@media(min-width:600px){.modal{border-radius:16px;margin-bottom:auto;margin-top:10vh}}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.modal h3{font-size:1.1rem;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+.modal .close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text2);padding:4px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:.8rem;font-weight:600;color:var(--text2);margin-bottom:4px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 12px;border:2px solid var(--border);border-radius:8px;font-size:.9rem;outline:none;transition:.2s}
+.form-group input:focus,.form-group select:focus{border-color:var(--primary)}
+.form-group .hint{font-size:.7rem;color:var(--text2);margin-top:3px}
+.existing-debts{background:var(--warn-bg);border-radius:8px;padding:10px;margin-bottom:12px;font-size:.8rem}
+.existing-debts strong{color:#92400e}
+
+.page{display:none}
+.page.active{display:block}
+
+.empty{text-align:center;padding:30px;color:var(--text2);font-size:.9rem}
+
+.payments-log{font-size:.8rem;margin-top:6px}
+.payments-log .pay-entry{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border)}
+
+.toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.toolbar select{padding:8px 12px;border:2px solid var(--border);border-radius:8px;font-size:.85rem;outline:none}
+
+.sync-bar{display:flex;align-items:center;gap:6px;justify-content:center;padding:4px 0;font-size:.7rem}
+.sync-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sync-dot.online{background:#22c55e}
+.sync-dot.offline{background:#ef4444}
+.sync-dot.syncing{background:#f59e0b;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sync-bar a{color:rgba(255,255,255,.7);cursor:pointer;text-decoration:underline;margin-left:4px}
+
+.setup-steps{counter-reset:step}
+.setup-steps li{counter-increment:step;margin-bottom:12px;padding-left:28px;position:relative;font-size:.85rem;line-height:1.5}
+.setup-steps li::before{content:counter(step);position:absolute;left:0;top:0;width:22px;height:22px;background:var(--primary);color:#fff;border-radius:50%;text-align:center;line-height:22px;font-size:.75rem;font-weight:700}
+.setup-steps code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:.8rem;word-break:break-all}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Учёт должников</h1>
+  <p id="headerDate"></p>
+  <div class="sync-bar" id="syncBar">
+    <span class="sync-dot offline" id="syncDot"></span>
+    <span id="syncText">Облако не подключено</span>
+    <a onclick="openModal('syncModal')">Настроить</a>
+  </div>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="showPage('dashboard')">Главная<span id="alertBadge" class="badge" style="display:none"></span></button>
+    <button class="tab" onclick="showPage('debts')">Долги</button>
+    <button class="tab" onclick="showPage('clients')">Клиенты</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="page active">
+    <div class="stats" id="statsGrid"></div>
+    <div class="chart-cards" id="chartCards"></div>
+    <div id="alertsContainer"></div>
+    <div class="card">
+      <h2>Просроченные долги</h2>
+      <div id="overdueList" class="debt-list"></div>
+    </div>
+    <div class="card">
+      <h2>Ближайшие сроки (7 дней)</h2>
+      <div id="upcomingList" class="debt-list"></div>
+    </div>
+  </div>
+
+  <!-- DEBTS -->
+  <div id="debts" class="page">
+    <div class="toolbar">
+      <select id="debtFilter" onchange="renderDebts()">
+        <option value="active">Активные</option>
+        <option value="overdue">Просроченные</option>
+        <option value="closed">Закрытые</option>
+        <option value="all">Все</option>
+      </select>
+    </div>
+    <div class="search"><input type="text" id="debtSearch" placeholder="Поиск по имени клиента..." oninput="renderDebts()"></div>
+    <div id="debtsList" class="debt-list"></div>
+  </div>
+
+  <!-- CLIENTS -->
+  <div id="clients" class="page">
+    <div class="search"><input type="text" id="clientSearch" placeholder="Найти клиента..." oninput="renderClients()"></div>
+    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openModal('clientModal')">+ Новый клиент</button></div>
+    <div id="clientsList" class="debt-list"></div>
+  </div>
+</div>
+
+<button class="btn-fab" onclick="openModal('debtModal')" title="Новый долг">+</button>
+
+<!-- MODAL: New Debt -->
+<div class="modal-overlay" id="debtModal">
+  <div class="modal">
+    <h3>Новый долг <button class="close" onclick="closeModal('debtModal')">&times;</button></h3>
+    <div id="debtClientWarning"></div>
+    <div class="form-group">
+      <label>Клиент</label>
+      <input type="text" id="dClient" list="clientSuggestions" placeholder="Начните вводить имя..." oninput="onDebtClientInput()">
+      <datalist id="clientSuggestions"></datalist>
+      <div class="hint">Если клиент новый — введите имя и добавьте телефон ниже</div>
+    </div>
+    <div id="newClientFields" style="display:none">
+      <div class="form-group">
+        <label>Телефон нового клиента</label>
+        <input type="tel" id="dPhone" placeholder="+7-XXX-XXX-XX-XX">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Сумма долга (₽)</label>
+      <input type="number" id="dAmount" placeholder="0" min="1" inputmode="numeric">
+    </div>
+    <div class="form-group">
+      <label>Дата возврата</label>
+      <input type="date" id="dDueDate">
+    </div>
+    <div class="form-group">
+      <label>Комментарий (необязательно)</label>
+      <input type="text" id="dComment" placeholder="Что взял в долг...">
+    </div>
+    <button class="btn btn-primary" onclick="saveDebt()" style="width:100%;padding:12px;font-size:1rem">Записать долг</button>
+  </div>
+</div>
+
+<!-- MODAL: New Client -->
+<div class="modal-overlay" id="clientModal">
+  <div class="modal">
+    <h3>Новый клиент <button class="close" onclick="closeModal('clientModal')">&times;</button></h3>
+    <div class="form-group">
+      <label>Имя клиента</label>
+      <input type="text" id="cName" placeholder="Фамилия Имя">
+    </div>
+    <div class="form-group">
+      <label>Телефон</label>
+      <input type="tel" id="cPhone" placeholder="+7-XXX-XXX-XX-XX">
+    </div>
+    <button class="btn btn-primary" onclick="saveClient()" style="width:100%;padding:12px;font-size:1rem">Добавить клиента</button>
+  </div>
+</div>
+
+<!-- MODAL: Payment -->
+<div class="modal-overlay" id="payModal">
+  <div class="modal">
+    <h3>Внести оплату <button class="close" onclick="closeModal('payModal')">&times;</button></h3>
+    <div id="payInfo"></div>
+    <div class="form-group">
+      <label>Сумма оплаты (₽)</label>
+      <input type="number" id="pAmount" placeholder="0" min="1" inputmode="numeric">
+    </div>
+    <div class="form-group">
+      <label>Комментарий</label>
+      <input type="text" id="pComment" placeholder="Частичная оплата...">
+    </div>
+    <button class="btn btn-success" onclick="savePayment()" style="width:100%;padding:12px;font-size:1rem">Записать оплату</button>
+  </div>
+</div>
+
+<!-- MODAL: Debt Detail -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <h3 id="detailTitle">Детали долга <button class="close" onclick="closeModal('detailModal')">&times;</button></h3>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<!-- MODAL: Confirm Delete -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal" style="text-align:center;padding:24px">
+    <p style="font-size:1rem;margin-bottom:16px" id="confirmText"></p>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn btn-outline" onclick="closeModal('confirmModal')">Отмена</button>
+      <button class="btn btn-danger" id="confirmBtn">Удалить</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Sync Settings -->
+<div class="modal-overlay" id="syncModal">
+  <div class="modal">
+    <h3>Облачная синхронизация <button class="close" onclick="closeModal('syncModal')">&times;</button></h3>
+    <div class="form-group">
+      <label>URL Google Apps Script</label>
+      <input type="url" id="syncUrl" placeholder="https://script.google.com/macros/s/...../exec">
+      <div class="hint">Вставьте URL вашего развёрнутого Apps Script</div>
+    </div>
+    <button class="btn btn-primary" onclick="saveSyncSettings()" style="width:100%;padding:12px;font-size:.95rem;margin-bottom:12px">Подключить</button>
+    <button class="btn btn-outline" onclick="disconnectSync()" style="width:100%;padding:10px;font-size:.85rem;margin-bottom:16px">Отключить облако</button>
+
+    <details style="margin-top:8px">
+      <summary style="font-size:.85rem;font-weight:600;cursor:pointer;color:var(--primary)">Как настроить Google Sheets (одноразово)</summary>
+      <ol class="setup-steps" style="margin-top:12px">
+        <li>Создайте новую Google Таблицу на <code>sheets.google.com</code></li>
+        <li>Откройте <strong>Расширения &rarr; Apps Script</strong></li>
+        <li>Удалите весь код и вставьте содержимое файла <code>google_apps_script.js</code></li>
+        <li>Нажмите <strong>Развернуть &rarr; Новое развёртывание</strong></li>
+        <li>Тип: <strong>Веб-приложение</strong>. Доступ: <strong>Все</strong>. Нажмите <strong>Развернуть</strong></li>
+        <li>При первом запуске разрешите доступ к таблице (нажмите «Просмотреть разрешения» &rarr; выберите аккаунт &rarr; «Разрешить»)</li>
+        <li>Скопируйте <strong>URL веб-приложения</strong> и вставьте выше</li>
+      </ol>
+    </details>
+  </div>
+</div>
+
+<!-- MODAL: Export/Import -->
+<div class="modal-overlay" id="backupModal">
+  <div class="modal">
+    <h3>Резервная копия <button class="close" onclick="closeModal('backupModal')">&times;</button></h3>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-primary" onclick="exportData()" style="padding:14px;font-size:.95rem">Скачать резервную копию</button>
+      <label class="btn btn-outline" style="padding:14px;font-size:.95rem;justify-content:center;cursor:pointer">
+        Загрузить из копии
+        <input type="file" accept=".json" onchange="importData(event)" style="display:none">
+      </label>
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center;padding:10px 0 20px;opacity:.5;font-size:.75rem;display:flex;gap:8px;justify-content:center">
+  <button class="btn btn-outline btn-sm" onclick="openModal('backupModal')">Резервная копия</button>
+  <button class="btn btn-outline btn-sm" onclick="openModal('syncModal')">Облако</button>
+</div>
+
+<script>
+const DB_KEY = 'debtTracker';
+const SYNC_URL_KEY = 'debtTracker_syncUrl';
+let syncInProgress = false;
+
+function loadDB() {
+  const d = localStorage.getItem(DB_KEY);
+  if (d) return JSON.parse(d);
+  return { clients: [], debts: [], payments: [], nextClientId: 1, nextDebtId: 1, nextPayId: 1 };
+}
+
+function saveDB(db) {
+  localStorage.setItem(DB_KEY, JSON.stringify(db));
+  syncToCloud(db);
+}
+
+// ===== CLOUD SYNC =====
+function getSyncUrl() { return localStorage.getItem(SYNC_URL_KEY) || ''; }
+
+function updateSyncStatus(state, text) {
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncText');
+  dot.className = 'sync-dot ' + state;
+  txt.textContent = text;
+}
+
+function syncToCloud(db) {
+  const url = getSyncUrl();
+  if (!url) return;
+  if (syncInProgress) return;
+  syncInProgress = true;
+  updateSyncStatus('syncing', 'Сохранение...');
+
+  fetch(url + '?action=save', {
+    method: 'POST',
+    body: JSON.stringify(db),
+    headers: { 'Content-Type': 'text/plain' },
+    mode: 'no-cors'
+  }).then(() => {
+    syncInProgress = false;
+    updateSyncStatus('online', 'Сохранено в облаке');
+    setTimeout(() => {
+      if (!syncInProgress) updateSyncStatus('online', 'Облако подключено');
+    }, 2000);
+  }).catch(err => {
+    syncInProgress = false;
+    updateSyncStatus('offline', 'Ошибка сохранения');
+    console.error('Sync save error:', err);
+  });
+}
+
+function syncFromCloud() {
+  const url = getSyncUrl();
+  if (!url) return Promise.resolve(null);
+  updateSyncStatus('syncing', 'Загрузка из облака...');
+
+  return fetch(url + '?action=load')
+    .then(r => r.json())
+    .then(res => {
+      if (res.success && res.data && res.data.clients && res.data.clients.length > 0) {
+        localStorage.setItem(DB_KEY, JSON.stringify(res.data));
+        updateSyncStatus('online', 'Облако подключено');
+        return res.data;
+      }
+      updateSyncStatus('online', 'Облако подключено (пусто)');
+      return null;
+    })
+    .catch(err => {
+      updateSyncStatus('offline', 'Нет связи с облаком');
+      console.error('Sync load error:', err);
+      return null;
+    });
+}
+
+function saveSyncSettings() {
+  const url = document.getElementById('syncUrl').value.trim();
+  if (!url) return alert('Введите URL');
+  if (!url.startsWith('https://script.google.com/')) return alert('URL должен начинаться с https://script.google.com/');
+  localStorage.setItem(SYNC_URL_KEY, url);
+  closeModal('syncModal');
+  updateSyncStatus('syncing', 'Проверка подключения...');
+
+  const localDb = loadDB();
+  if (localDb.clients.length > 0) {
+    syncToCloud(localDb);
+  }
+
+  syncFromCloud().then(cloudData => {
+    if (cloudData) refreshAll();
+  });
+}
+
+function disconnectSync() {
+  localStorage.removeItem(SYNC_URL_KEY);
+  updateSyncStatus('offline', 'Облако не подключено');
+  document.getElementById('syncUrl').value = '';
+  closeModal('syncModal');
+}
+
+function initSync() {
+  const url = getSyncUrl();
+  document.getElementById('syncUrl').value = url;
+  if (url) {
+    updateSyncStatus('syncing', 'Подключение...');
+    syncFromCloud().then(cloudData => {
+      if (cloudData) refreshAll();
+    });
+  }
+}
+
+function fmt(n) {
+  return Number(n).toLocaleString('ru-RU') + ' ₽';
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function daysDiff(dateStr) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(dateStr); d.setHours(0,0,0,0);
+  return Math.round((d - today) / 86400000);
+}
+
+function getDebtPaid(db, debtId) {
+  return db.payments.filter(p => p.debtId === debtId).reduce((s, p) => s + p.amount, 0);
+}
+
+function getDebtStatus(db, debt) {
+  const paid = getDebtPaid(db, debt.id);
+  const remaining = debt.amount - paid;
+  if (remaining <= 0) return 'closed';
+  if (daysDiff(debt.dueDate) < 0) return 'overdue';
+  return 'open';
+}
+
+function getClientRating(db, clientId) {
+  const clientDebts = db.debts.filter(d => d.clientId === clientId);
+  if (clientDebts.length === 0) return 5;
+  let rating = 5;
+  clientDebts.forEach(d => {
+    const st = getDebtStatus(db, d);
+    if (st === 'overdue') rating -= 0.5;
+    if (st === 'closed') rating += 0.2;
+  });
+  return Math.max(1, Math.min(5, Math.round(rating * 10) / 10));
+}
+
+function getClientTotalDebt(db, clientId) {
+  return db.debts.filter(d => d.clientId === clientId && getDebtStatus(db, d) !== 'closed')
+    .reduce((s, d) => s + (d.amount - getDebtPaid(db, d.id)), 0);
+}
+
+function stars(rating) {
+  const full = Math.floor(rating);
+  let s = '★'.repeat(full);
+  if (rating - full >= 0.5) s += '½';
+  s += '☆'.repeat(5 - Math.ceil(rating));
+  return s;
+}
+
+// ===== PAGES =====
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => { if (t.textContent.includes(id === 'dashboard' ? 'Главная' : id === 'debts' ? 'Долги' : 'Клиенты')) t.classList.add('active'); });
+  if (id === 'dashboard') renderDashboard();
+  if (id === 'debts') renderDebts();
+  if (id === 'clients') renderClients();
+}
+
+// ===== DASHBOARD =====
+function renderDashboard() {
+  const db = loadDB();
+  const activeDebts = db.debts.filter(d => getDebtStatus(db, d) !== 'closed');
+  const overdueDebts = db.debts.filter(d => getDebtStatus(db, d) === 'overdue');
+  const totalDebt = activeDebts.reduce((s, d) => s + (d.amount - getDebtPaid(db, d.id)), 0);
+  const totalPaid = db.payments.reduce((s, p) => s + p.amount, 0);
+  const totalIssued = db.debts.reduce((s, d) => s + d.amount, 0);
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat danger"><div class="label">Общий долг</div><div class="value">${fmt(totalDebt)}</div></div>
+    <div class="stat success"><div class="label">Возвращено</div><div class="value">${fmt(totalPaid)}</div></div>
+    <div class="stat info"><div class="label">Выдано всего</div><div class="value">${fmt(totalIssued)}</div></div>
+    <div class="stat warn"><div class="label">Просрочено</div><div class="value">${overdueDebts.length}</div></div>
+  `;
+
+  // Chart cards
+  const soonDebts = db.debts.filter(d => { const dd = daysDiff(d.dueDate); return getDebtStatus(db, d) === 'open' && dd >= 0 && dd <= 3; });
+  const overdueSum = overdueDebts.reduce((s,d) => s + (d.amount - getDebtPaid(db, d.id)), 0);
+  const soonSum = soonDebts.reduce((s,d) => s + (d.amount - getDebtPaid(db, d.id)), 0);
+  const circumference = 2 * Math.PI * 22;
+  const overduePct = totalDebt > 0 ? overdueSum / totalDebt : 0;
+  const soonPct = totalDebt > 0 ? soonSum / totalDebt : 0;
+  const overdueOffset = circumference * (1 - overduePct);
+  const soonOffset = circumference * (1 - soonPct);
+
+  function ringSvg(pct, offset, color) {
+    return `<svg viewBox="0 0 50 50"><circle class="ring-bg" cx="25" cy="25" r="22"/><circle class="ring-fill" cx="25" cy="25" r="22" stroke="${color}" stroke-dasharray="${circumference.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"/></svg>`;
+  }
+
+  document.getElementById('chartCards').innerHTML = `
+    <div class="chart-card">
+      <div class="ring">
+        ${ringSvg(overduePct, overdueOffset, '#dc2626')}
+        <div class="ring-label" style="color:#dc2626">${overdueDebts.length}</div>
+      </div>
+      <div class="chart-info">
+        <div class="chart-title">Просроченные</div>
+        <div class="chart-value" style="color:#dc2626">${fmt(overdueSum)}</div>
+        <div class="chart-sub">${Math.round(overduePct * 100)}% от общего долга</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="ring">
+        ${ringSvg(soonPct, soonOffset, '#d97706')}
+        <div class="ring-label" style="color:#d97706">${soonDebts.length}</div>
+      </div>
+      <div class="chart-info">
+        <div class="chart-title">Ближайшие 3 дня</div>
+        <div class="chart-value" style="color:#d97706">${fmt(soonSum)}</div>
+        <div class="chart-sub">${Math.round(soonPct * 100)}% от общего долга</div>
+      </div>
+    </div>
+  `;
+
+  // Alerts (risky clients only)
+  let alerts = '';
+  const riskyClients = db.clients.filter(c => getClientRating(db, c.id) <= 2);
+  riskyClients.forEach(c => {
+    alerts += `<div class="alert danger"><span class="icon">⛔</span><div><strong>${c.name}</strong> — рисковый клиент (рейтинг ${getClientRating(db, c.id).toFixed(1)}). Имеет свойство просрочивать долги!</div></div>`;
+  });
+  document.getElementById('alertsContainer').innerHTML = alerts;
+
+  const badge = document.getElementById('alertBadge');
+  if (overdueDebts.length > 0) { badge.style.display = 'inline'; badge.textContent = overdueDebts.length; }
+  else badge.style.display = 'none';
+
+  // Overdue list
+  renderDebtList('overdueList', overdueDebts, db);
+
+  // Upcoming
+  const upcoming = db.debts.filter(d => { const dd = daysDiff(d.dueDate); return getDebtStatus(db, d) === 'open' && dd >= 0 && dd <= 7; })
+    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+  renderDebtList('upcomingList', upcoming, db);
+}
+
+function renderDebtList(containerId, debts, db) {
+  const el = document.getElementById(containerId);
+  if (debts.length === 0) { el.innerHTML = '<div class="empty">Нет записей</div>'; return; }
+  el.innerHTML = debts.map(d => {
+    const paid = getDebtPaid(db, d.id);
+    const remaining = d.amount - paid;
+    const st = getDebtStatus(db, d);
+    const dd = daysDiff(d.dueDate);
+    const statusLabel = st === 'overdue' ? 'Просрочен' : st === 'closed' ? 'Закрыт' : 'Открыт';
+    const statusClass = st === 'overdue' ? 's-overdue' : st === 'closed' ? 's-closed' : 's-open';
+    const itemClass = st === 'overdue' ? 'overdue' : (st === 'open' && dd <= 3 && dd >= 0) ? 'soon' : st === 'closed' ? 'closed' : '';
+    const daysText = st === 'overdue' ? `${Math.abs(dd)} дн. просрочки` : st === 'open' ? `${dd} дн. до срока` : '';
+    const client = db.clients.find(c => c.id === d.clientId);
+    const rating = client ? getClientRating(db, client.id) : 5;
+    const riskBadge = rating <= 2 ? '<span class="risk-badge">РИСК</span>' : '';
+    const progress = d.amount > 0 ? Math.min(100, Math.round(paid / d.amount * 100)) : 0;
+    return `<div class="debt-item ${itemClass}" onclick="showDebtDetail(${d.id})">
+      <div class="top">
+        <span class="name">${client ? client.name : '?'}${riskBadge}</span>
+        <span class="amount">${fmt(remaining)}</span>
+      </div>
+      <div style="background:#e5e7eb;border-radius:4px;height:4px;margin-bottom:6px"><div style="background:${st==='closed'?'var(--success)':st==='overdue'?'var(--danger)':'var(--primary)'};height:100%;border-radius:4px;width:${progress}%"></div></div>
+      <div class="meta">
+        <span class="status ${statusClass}">${statusLabel}</span>
+        <span>Долг: ${fmt(d.amount)}</span>
+        <span>Оплачено: ${fmt(paid)}</span>
+        <span>${daysText}</span>
+        <span>Возврат: ${fmtDate(d.dueDate)}</span>
+      </div>
+      ${st !== 'closed' ? `<div class="actions">
+        <button class="btn btn-success btn-sm" onclick="event.stopPropagation();openPayModal(${d.id})">Внести оплату</button>
+        <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();confirmDelete('debt',${d.id})">Удалить</button>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ===== DEBTS PAGE =====
+function renderDebts() {
+  const db = loadDB();
+  const filter = document.getElementById('debtFilter').value;
+  const search = document.getElementById('debtSearch').value.toLowerCase();
+  let debts = db.debts;
+  if (filter === 'active') debts = debts.filter(d => getDebtStatus(db, d) !== 'closed');
+  else if (filter === 'overdue') debts = debts.filter(d => getDebtStatus(db, d) === 'overdue');
+  else if (filter === 'closed') debts = debts.filter(d => getDebtStatus(db, d) === 'closed');
+  if (search) {
+    debts = debts.filter(d => {
+      const c = db.clients.find(c => c.id === d.clientId);
+      return c && c.name.toLowerCase().includes(search);
+    });
+  }
+  debts.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+  renderDebtList('debtsList', debts, db);
+}
+
+// ===== CLIENTS PAGE =====
+function renderClients() {
+  const db = loadDB();
+  const search = document.getElementById('clientSearch').value.toLowerCase();
+  let clients = db.clients;
+  if (search) clients = clients.filter(c => c.name.toLowerCase().includes(search) || c.phone.includes(search));
+  const el = document.getElementById('clientsList');
+  if (clients.length === 0) { el.innerHTML = '<div class="empty">Нет клиентов</div>'; return; }
+  el.innerHTML = clients.map(c => {
+    const rating = getClientRating(db, c.id);
+    const debt = getClientTotalDebt(db, c.id);
+    const risky = rating <= 2;
+    return `<div class="client-item ${risky ? 'risky' : ''}" onclick="showClientDebts(${c.id})">
+      <div class="client-info">
+        <div class="cname">${c.name}${risky ? '<span class="risk-badge">РИСКОВЫЙ</span>' : ''}</div>
+        <div class="cphone">${c.phone || '—'}</div>
+      </div>
+      <div class="client-right">
+        <div class="cdebt" style="color:${debt > 0 ? 'var(--danger)' : 'var(--success)'}">${debt > 0 ? fmt(debt) : 'Нет долгов'}</div>
+        <div class="crating" style="color:${risky ? 'var(--danger)' : 'var(--warn)'}">${stars(rating)} ${rating.toFixed(1)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showClientDebts(clientId) {
+  const db = loadDB();
+  const client = db.clients.find(c => c.id === clientId);
+  if (!client) return;
+  const debts = db.debts.filter(d => d.clientId === clientId);
+  const rating = getClientRating(db, clientId);
+  let html = `<div style="margin-bottom:12px">
+    <div style="font-size:.85rem;color:var(--text2)">Телефон: <strong>${client.phone || '—'}</strong></div>
+    <div style="font-size:.85rem;color:${rating<=2?'var(--danger)':'var(--text2)'}">Рейтинг: <strong>${stars(rating)} ${rating.toFixed(1)}</strong></div>
+    <div style="font-size:.85rem;color:var(--text2)">Клиент с: ${fmtDate(client.createdAt)}</div>
+  </div>`;
+  if (debts.length === 0) html += '<div class="empty">Нет долгов</div>';
+  else {
+    debts.forEach(d => {
+      const paid = getDebtPaid(db, d.id);
+      const st = getDebtStatus(db, d);
+      const statusLabel = st === 'overdue' ? 'Просрочен' : st === 'closed' ? 'Закрыт' : 'Открыт';
+      html += `<div class="debt-item ${st}" style="margin-bottom:8px">
+        <div class="top"><span>${fmtDate(d.createdAt)}</span><span class="amount">${fmt(d.amount - paid)}</span></div>
+        <div class="meta"><span class="status s-${st}">${statusLabel}</span><span>Долг: ${fmt(d.amount)}</span><span>Оплачено: ${fmt(paid)}</span><span>Возврат: ${fmtDate(d.dueDate)}</span></div>
+        ${d.comment ? `<div style="font-size:.8rem;color:var(--text2);margin-top:4px">${d.comment}</div>` : ''}
+      </div>`;
+    });
+  }
+  html += `<div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn btn-primary btn-sm" onclick="closeModal('detailModal');prefillDebt(${clientId})">+ Новый долг</button>
+    <button class="btn btn-danger btn-sm" onclick="closeModal('detailModal');confirmDelete('client',${clientId})">Удалить клиента</button>
+  </div>`;
+  document.getElementById('detailTitle').innerHTML = `${client.name} <button class="close" onclick="closeModal('detailModal')">&times;</button>`;
+  document.getElementById('detailContent').innerHTML = html;
+  openModal('detailModal');
+}
+
+function prefillDebt(clientId) {
+  const db = loadDB();
+  const client = db.clients.find(c => c.id === clientId);
+  if (client) {
+    document.getElementById('dClient').value = client.name;
+    onDebtClientInput();
+  }
+  openModal('debtModal');
+}
+
+// ===== DEBT DETAIL =====
+function showDebtDetail(debtId) {
+  const db = loadDB();
+  const d = db.debts.find(x => x.id === debtId);
+  if (!d) return;
+  const client = db.clients.find(c => c.id === d.clientId);
+  const paid = getDebtPaid(db, d.id);
+  const st = getDebtStatus(db, d);
+  const payments = db.payments.filter(p => p.debtId === debtId).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  let html = `<div style="margin-bottom:12px">
+    <div style="font-size:.85rem">Клиент: <strong>${client ? client.name : '?'}</strong></div>
+    <div style="font-size:.85rem">Сумма: <strong>${fmt(d.amount)}</strong></div>
+    <div style="font-size:.85rem">Оплачено: <strong>${fmt(paid)}</strong></div>
+    <div style="font-size:.85rem;font-weight:700;color:${st==='closed'?'var(--success)':'var(--danger)'}">Остаток: ${fmt(d.amount - paid)}</div>
+    <div style="font-size:.85rem">Дата взятия: ${fmtDate(d.createdAt)}</div>
+    <div style="font-size:.85rem">Дата возврата: ${fmtDate(d.dueDate)}</div>
+    ${d.comment ? `<div style="font-size:.85rem;color:var(--text2)">Комментарий: ${d.comment}</div>` : ''}
+  </div>`;
+  if (payments.length > 0) {
+    html += '<div class="payments-log"><strong>История оплат:</strong>';
+    payments.forEach(p => {
+      html += `<div class="pay-entry"><span>${fmtDate(p.date)} ${p.comment ? '— ' + p.comment : ''}</span><span style="font-weight:700;color:var(--success)">+${fmt(p.amount)}</span></div>`;
+    });
+    html += '</div>';
+  }
+  if (st !== 'closed') {
+    html += `<div style="margin-top:12px"><button class="btn btn-success" onclick="closeModal('detailModal');openPayModal(${d.id})" style="width:100%;padding:12px">Внести оплату</button></div>`;
+  }
+
+  document.getElementById('detailTitle').innerHTML = `Долг #${d.id} <button class="close" onclick="closeModal('detailModal')">&times;</button>`;
+  document.getElementById('detailContent').innerHTML = html;
+  openModal('detailModal');
+}
+
+// ===== SAVE DEBT =====
+function onDebtClientInput() {
+  const db = loadDB();
+  const name = document.getElementById('dClient').value.trim();
+  const client = db.clients.find(c => c.name.toLowerCase() === name.toLowerCase());
+  const suggestions = document.getElementById('clientSuggestions');
+  suggestions.innerHTML = db.clients.map(c => `<option value="${c.name}">`).join('');
+
+  const newFields = document.getElementById('newClientFields');
+  const warn = document.getElementById('debtClientWarning');
+
+  if (client) {
+    newFields.style.display = 'none';
+    const openDebts = db.debts.filter(d => d.clientId === client.id && getDebtStatus(db, d) !== 'closed');
+    const totalDebt = openDebts.reduce((s, d) => s + (d.amount - getDebtPaid(db, d.id)), 0);
+    const rating = getClientRating(db, client.id);
+    let w = '';
+    if (openDebts.length > 0) {
+      w += `<div class="existing-debts"><strong>Текущие долги ${client.name}:</strong> ${openDebts.length} шт. на сумму ${fmt(totalDebt)}</div>`;
+    }
+    if (rating <= 2) {
+      w += `<div class="alert danger"><span class="icon">⛔</span><div><strong>ВНИМАНИЕ:</strong> ${client.name} — рисковый клиент! Рейтинг: ${rating.toFixed(1)} ${stars(rating)}. Часто просрочивает долги.</div></div>`;
+    }
+    warn.innerHTML = w;
+  } else {
+    warn.innerHTML = '';
+    newFields.style.display = name.length > 0 ? 'block' : 'none';
+  }
+}
+
+function saveDebt() {
+  const db = loadDB();
+  const name = document.getElementById('dClient').value.trim();
+  const amount = parseInt(document.getElementById('dAmount').value);
+  const dueDate = document.getElementById('dDueDate').value;
+  const comment = document.getElementById('dComment').value.trim();
+
+  if (!name) return alert('Введите имя клиента');
+  if (!amount || amount <= 0) return alert('Введите сумму долга');
+  if (!dueDate) return alert('Укажите дату возврата');
+
+  let client = db.clients.find(c => c.name.toLowerCase() === name.toLowerCase());
+  if (!client) {
+    const phone = document.getElementById('dPhone').value.trim();
+    client = { id: db.nextClientId++, name, phone, createdAt: new Date().toISOString() };
+    db.clients.push(client);
+  }
+
+  const debt = { id: db.nextDebtId++, clientId: client.id, amount, createdAt: new Date().toISOString(), dueDate, comment };
+  db.debts.push(debt);
+  saveDB(db);
+
+  closeModal('debtModal');
+  document.getElementById('dClient').value = '';
+  document.getElementById('dAmount').value = '';
+  document.getElementById('dDueDate').value = '';
+  document.getElementById('dComment').value = '';
+  document.getElementById('dPhone').value = '';
+  document.getElementById('debtClientWarning').innerHTML = '';
+  document.getElementById('newClientFields').style.display = 'none';
+  refreshAll();
+}
+
+// ===== SAVE CLIENT =====
+function saveClient() {
+  const db = loadDB();
+  const name = document.getElementById('cName').value.trim();
+  const phone = document.getElementById('cPhone').value.trim();
+  if (!name) return alert('Введите имя');
+  if (db.clients.find(c => c.name.toLowerCase() === name.toLowerCase())) return alert('Клиент с таким именем уже есть');
+  db.clients.push({ id: db.nextClientId++, name, phone, createdAt: new Date().toISOString() });
+  saveDB(db);
+  closeModal('clientModal');
+  document.getElementById('cName').value = '';
+  document.getElementById('cPhone').value = '';
+  refreshAll();
+}
+
+// ===== PAYMENT =====
+let payDebtId = null;
+function openPayModal(debtId) {
+  payDebtId = debtId;
+  const db = loadDB();
+  const d = db.debts.find(x => x.id === debtId);
+  const client = db.clients.find(c => c.id === d.clientId);
+  const paid = getDebtPaid(db, debtId);
+  const remaining = d.amount - paid;
+  document.getElementById('payInfo').innerHTML = `
+    <div style="margin-bottom:12px;padding:10px;background:var(--primary-light);border-radius:8px;font-size:.85rem">
+      <div>Клиент: <strong>${client ? client.name : '?'}</strong></div>
+      <div>Долг: ${fmt(d.amount)} | Оплачено: ${fmt(paid)} | <strong>Остаток: ${fmt(remaining)}</strong></div>
+    </div>`;
+  document.getElementById('pAmount').value = '';
+  document.getElementById('pAmount').max = remaining;
+  document.getElementById('pAmount').placeholder = remaining;
+  document.getElementById('pComment').value = '';
+  openModal('payModal');
+}
+
+function savePayment() {
+  const db = loadDB();
+  const amount = parseInt(document.getElementById('pAmount').value);
+  const comment = document.getElementById('pComment').value.trim();
+  if (!amount || amount <= 0) return alert('Введите сумму');
+  const d = db.debts.find(x => x.id === payDebtId);
+  const remaining = d.amount - getDebtPaid(db, payDebtId);
+  if (amount > remaining) return alert(`Сумма превышает остаток (${fmt(remaining)})`);
+  db.payments.push({ id: db.nextPayId++, debtId: payDebtId, amount, date: new Date().toISOString(), comment });
+  saveDB(db);
+  closeModal('payModal');
+  refreshAll();
+}
+
+// ===== DELETE =====
+function confirmDelete(type, id) {
+  const db = loadDB();
+  let text = '';
+  if (type === 'debt') text = 'Удалить этот долг и все его платежи?';
+  else {
+    const c = db.clients.find(c => c.id === id);
+    text = `Удалить клиента "${c ? c.name : '?'}" и все его долги?`;
+  }
+  document.getElementById('confirmText').textContent = text;
+  document.getElementById('confirmBtn').onclick = () => { doDelete(type, id); closeModal('confirmModal'); };
+  openModal('confirmModal');
+}
+
+function doDelete(type, id) {
+  const db = loadDB();
+  if (type === 'debt') {
+    db.debts = db.debts.filter(d => d.id !== id);
+    db.payments = db.payments.filter(p => p.debtId !== id);
+  } else {
+    const clientDebts = db.debts.filter(d => d.clientId === id).map(d => d.id);
+    db.debts = db.debts.filter(d => d.clientId !== id);
+    db.payments = db.payments.filter(p => !clientDebts.includes(p.debtId));
+    db.clients = db.clients.filter(c => c.id !== id);
+  }
+  saveDB(db);
+  refreshAll();
+}
+
+// ===== EXPORT / IMPORT =====
+function exportData() {
+  const db = loadDB();
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `должники_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  closeModal('backupModal');
+}
+
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!data.clients || !data.debts) throw new Error('Неверный формат');
+      if (!confirm(`Загрузить данные? Клиентов: ${data.clients.length}, Долгов: ${data.debts.length}. Текущие данные будут заменены.`)) return;
+      saveDB(data);
+      closeModal('backupModal');
+      refreshAll();
+    } catch (err) { alert('Ошибка: ' + err.message); }
+  };
+  reader.readAsText(file);
+}
+
+// ===== MODALS =====
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+// ===== REFRESH =====
+function refreshAll() {
+  const activePage = document.querySelector('.page.active');
+  if (activePage) {
+    if (activePage.id === 'dashboard') renderDashboard();
+    else if (activePage.id === 'debts') renderDebts();
+    else if (activePage.id === 'clients') renderClients();
+  }
+}
+
+// ===== INIT =====
+document.getElementById('headerDate').textContent = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+const tomorrow = new Date();
+tomorrow.setDate(tomorrow.getDate() + 14);
+document.getElementById('dDueDate').value = tomorrow.toISOString().slice(0, 10);
+
+(function init() {
+  const db = loadDB();
+  if (db.clients.length === 0) {
+    db.clients = [
+      { id: 1, name: 'Иванов Сергей', phone: '+7-999-111-22-33', createdAt: '2026-05-01T00:00:00' },
+      { id: 2, name: 'Петрова Анна', phone: '+7-999-444-55-66', createdAt: '2026-05-10T00:00:00' },
+      { id: 3, name: 'Козлов Дмитрий', phone: '+7-999-777-88-99', createdAt: '2026-04-15T00:00:00' },
+    ];
+    db.debts = [
+      { id: 1, clientId: 1, amount: 5000, createdAt: '2026-05-15T00:00:00', dueDate: '2026-06-01', comment: 'Продукты' },
+      { id: 2, clientId: 2, amount: 3000, createdAt: '2026-05-20T00:00:00', dueDate: '2026-06-15', comment: 'Хлеб, молоко' },
+      { id: 3, clientId: 1, amount: 2000, createdAt: '2026-06-01T00:00:00', dueDate: '2026-06-20', comment: 'Крупы' },
+      { id: 4, clientId: 3, amount: 8000, createdAt: '2026-04-20T00:00:00', dueDate: '2026-05-15', comment: 'Мясо, рыба' },
+      { id: 5, clientId: 3, amount: 4000, createdAt: '2026-05-25T00:00:00', dueDate: '2026-06-10', comment: 'Продукты' },
+    ];
+    db.payments = [
+      { id: 1, debtId: 1, amount: 2000, date: '2026-05-28T00:00:00', comment: 'Частичная оплата' },
+      { id: 2, debtId: 4, amount: 3000, date: '2026-05-10T00:00:00', comment: 'Частичная оплата' },
+      { id: 3, debtId: 2, amount: 3000, date: '2026-06-05T00:00:00', comment: 'Полная оплата' },
+    ];
+    db.nextClientId = 4; db.nextDebtId = 6; db.nextPayId = 4;
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+  }
+  refreshAll();
+  initSync();
+})();
+</script>
+</body>
+</html>
