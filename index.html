@@ -135,17 +135,68 @@ header p{font-size:.8rem;opacity:.8;margin-top:2px}
 .setup-steps li{counter-increment:step;margin-bottom:12px;padding-left:28px;position:relative;font-size:.85rem;line-height:1.5}
 .setup-steps li::before{content:counter(step);position:absolute;left:0;top:0;width:22px;height:22px;background:var(--primary);color:#fff;border-radius:50%;text-align:center;line-height:22px;font-size:.75rem;font-weight:700}
 .setup-steps code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:.8rem;word-break:break-all}
+
+#loginScreen{position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#1e3a5f,#1a56db);display:flex;align-items:center;justify-content:center;z-index:999}
+.login-box{background:#fff;border-radius:20px;padding:32px 24px;width:90%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.25);text-align:center}
+.login-box h2{font-size:1.3rem;color:var(--text);margin-bottom:6px}
+.login-box p{font-size:.8rem;color:var(--text2);margin-bottom:20px}
+.login-box .form-group{text-align:left}
+.login-users{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.login-user{display:flex;align-items:center;gap:12px;padding:12px;border:2px solid var(--border);border-radius:12px;cursor:pointer;transition:.2s}
+.login-user:hover,.login-user.selected{border-color:var(--primary);background:var(--primary-light)}
+.login-user .avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;color:#fff;flex-shrink:0}
+.login-user .uinfo{text-align:left}
+.login-user .uname{font-weight:700;font-size:.9rem}
+.login-user .urole{font-size:.7rem;color:var(--text2)}
+.user-label{font-size:.75rem;color:var(--text2);background:var(--primary-light);padding:3px 8px;border-radius:6px;font-weight:600}
+.admin-only{display:none}
+body.is-admin .admin-only{display:initial}
 </style>
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="loginScreen">
+  <div class="login-box">
+    <h2>Учёт должников</h2>
+    <p>Выберите пользователя для входа</p>
+    <div class="login-users">
+      <div class="login-user" onclick="selectUser('admin')">
+        <div class="avatar" style="background:#1a56db">А</div>
+        <div class="uinfo"><div class="uname">Админ</div><div class="urole">Полный доступ</div></div>
+      </div>
+      <div class="login-user" onclick="selectUser('seller1')">
+        <div class="avatar" style="background:#16a34a">П1</div>
+        <div class="uinfo"><div class="uname">Продавец 1</div><div class="urole">Ввод и просмотр</div></div>
+      </div>
+      <div class="login-user" onclick="selectUser('seller2')">
+        <div class="avatar" style="background:#d97706">П2</div>
+        <div class="uinfo"><div class="uname">Продавец 2</div><div class="urole">Ввод и просмотр</div></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <input type="password" id="loginPin" placeholder="Введите PIN-код" style="text-align:center;font-size:1.2rem;letter-spacing:8px">
+    </div>
+    <div id="loginError" style="color:var(--danger);font-size:.8rem;margin-bottom:8px;display:none"></div>
+    <button class="btn btn-primary" onclick="doLogin()" style="width:100%;padding:12px;font-size:1rem">Войти</button>
+  </div>
+</div>
+
 <header>
-  <h1>Учёт должников</h1>
-  <p id="headerDate"></p>
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <h1 style="text-align:left">Учёт должников</h1>
+      <p id="headerDate" style="text-align:left"></p>
+    </div>
+    <div style="text-align:right">
+      <span class="user-label" id="currentUserLabel"></span>
+      <a onclick="logout()" style="display:block;font-size:.65rem;color:rgba(255,255,255,.6);cursor:pointer;margin-top:2px">Выйти</a>
+    </div>
+  </div>
   <div class="sync-bar" id="syncBar">
     <span class="sync-dot offline" id="syncDot"></span>
     <span id="syncText">Облако не подключено</span>
-    <a onclick="openModal('syncModal')">Настроить</a>
+    <a onclick="openModal('syncModal')" class="admin-only">Настроить</a>
   </div>
 </header>
 
@@ -321,7 +372,7 @@ header p{font-size:.8rem;opacity:.8;margin-top:2px}
   </div>
 </div>
 
-<div style="text-align:center;padding:10px 0 20px;opacity:.5;font-size:.75rem;display:flex;gap:8px;justify-content:center">
+<div class="admin-only" style="text-align:center;padding:10px 0 20px;opacity:.5;font-size:.75rem;display:flex;gap:8px;justify-content:center">
   <button class="btn btn-outline btn-sm" onclick="openModal('backupModal')">Резервная копия</button>
   <button class="btn btn-outline btn-sm" onclick="openModal('syncModal')">Облако</button>
 </div>
@@ -329,7 +380,68 @@ header p{font-size:.8rem;opacity:.8;margin-top:2px}
 <script>
 const DB_KEY = 'debtTracker';
 const SYNC_URL_KEY = 'debtTracker_syncUrl';
+const USER_KEY = 'debtTracker_user';
 let syncInProgress = false;
+let currentUser = null;
+
+const USERS = {
+  admin:   { name: 'Админ',      pin: '1111', role: 'admin',  color: '#1a56db' },
+  seller1: { name: 'Продавец 1', pin: '2222', role: 'seller', color: '#16a34a' },
+  seller2: { name: 'Продавец 2', pin: '3333', role: 'seller', color: '#d97706' },
+};
+
+function isAdmin() { return currentUser && currentUser.role === 'admin'; }
+
+let selectedUserId = null;
+function selectUser(id) {
+  selectedUserId = id;
+  document.querySelectorAll('.login-user').forEach(el => el.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  document.getElementById('loginPin').focus();
+}
+
+function doLogin() {
+  if (!selectedUserId) return showLoginError('Выберите пользователя');
+  const pin = document.getElementById('loginPin').value;
+  const user = USERS[selectedUserId];
+  if (pin !== user.pin) return showLoginError('Неверный PIN-код');
+  currentUser = { ...user, id: selectedUserId };
+  localStorage.setItem(USER_KEY, selectedUserId);
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('currentUserLabel').textContent = user.name;
+  if (user.role === 'admin') document.body.classList.add('is-admin');
+  else document.body.classList.remove('is-admin');
+  initApp();
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg; el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 3000);
+}
+
+function logout() {
+  localStorage.removeItem(USER_KEY);
+  currentUser = null;
+  document.body.classList.remove('is-admin');
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginPin').value = '';
+  document.querySelectorAll('.login-user').forEach(el => el.classList.remove('selected'));
+  selectedUserId = null;
+}
+
+function tryAutoLogin() {
+  const savedId = localStorage.getItem(USER_KEY);
+  if (savedId && USERS[savedId]) {
+    currentUser = { ...USERS[savedId], id: savedId };
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('currentUserLabel').textContent = currentUser.name;
+    if (currentUser.role === 'admin') document.body.classList.add('is-admin');
+    initApp();
+    return true;
+  }
+  return false;
+}
 
 function loadDB() {
   const d = localStorage.getItem(DB_KEY);
@@ -607,7 +719,7 @@ function renderDebtList(containerId, debts, db) {
       </div>
       ${st !== 'closed' ? `<div class="actions">
         <button class="btn btn-success btn-sm" onclick="event.stopPropagation();openPayModal(${d.id})">Внести оплату</button>
-        <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();confirmDelete('debt',${d.id})">Удалить</button>
+        ${isAdmin() ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();confirmDelete('debt',${d.id})">Удалить</button>` : ''}
       </div>` : ''}
     </div>`;
   }).join('');
@@ -683,7 +795,7 @@ function showClientDebts(clientId) {
   }
   html += `<div style="display:flex;gap:8px;margin-top:12px">
     <button class="btn btn-primary btn-sm" onclick="closeModal('detailModal');prefillDebt(${clientId})">+ Новый долг</button>
-    <button class="btn btn-danger btn-sm" onclick="closeModal('detailModal');confirmDelete('client',${clientId})">Удалить клиента</button>
+    ${isAdmin() ? `<button class="btn btn-danger btn-sm" onclick="closeModal('detailModal');confirmDelete('client',${clientId})">Удалить клиента</button>` : ''}
   </div>`;
   document.getElementById('detailTitle').innerHTML = `${client.name} <button class="close" onclick="closeModal('detailModal')">&times;</button>`;
   document.getElementById('detailContent').innerHTML = html;
@@ -926,7 +1038,7 @@ const tomorrow = new Date();
 tomorrow.setDate(tomorrow.getDate() + 14);
 document.getElementById('dDueDate').value = tomorrow.toISOString().slice(0, 10);
 
-(function init() {
+function initApp() {
   const db = loadDB();
   if (db.clients.length === 0) {
     db.clients = [
@@ -951,7 +1063,15 @@ document.getElementById('dDueDate').value = tomorrow.toISOString().slice(0, 10);
   }
   refreshAll();
   initSync();
-})();
+}
+
+// Allow Enter key on PIN field
+document.getElementById('loginPin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// Try auto-login from saved session, otherwise show login screen
+if (!tryAutoLogin()) {
+  document.getElementById('loginScreen').style.display = 'flex';
+}
 </script>
 </body>
 </html>
