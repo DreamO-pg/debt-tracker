@@ -7,6 +7,7 @@ const SHEET_CLIENTS = 'Клиенты';
 const SHEET_DEBTS = 'Долги';
 const SHEET_PAYMENTS = 'Платежи';
 const SHEET_META = 'Мета';
+const SHEET_LOG = 'Журнал';
 
 function doGet(e) {
   return handleRequest(e);
@@ -61,6 +62,10 @@ function ensureSheets() {
     s.appendRow(['nextDebtId', '1']);
     s.appendRow(['nextPayId', '1']);
   }
+  if (!ss.getSheetByName(SHEET_LOG)) {
+    const s = ss.insertSheet(SHEET_LOG);
+    s.appendRow(['user', 'userName', 'action', 'detail', 'timestamp']);
+  }
 }
 
 function loadAllData() {
@@ -71,11 +76,13 @@ function loadAllData() {
   const debts = sheetToArray(ss.getSheetByName(SHEET_DEBTS));
   const payments = sheetToArray(ss.getSheetByName(SHEET_PAYMENTS));
   const meta = loadMeta(ss.getSheetByName(SHEET_META));
+  const log = sheetToArray(ss.getSheetByName(SHEET_LOG));
 
   return {
     clients: clients,
     debts: debts,
     payments: payments,
+    log: log,
     nextClientId: parseInt(meta.nextClientId) || 1,
     nextDebtId: parseInt(meta.nextDebtId) || 1,
     nextPayId: parseInt(meta.nextPayId) || 1
@@ -92,6 +99,10 @@ function saveAllData(data) {
     ['id', 'clientId', 'amount', 'createdAt', 'dueDate', 'comment']);
   arrayToSheet(ss.getSheetByName(SHEET_PAYMENTS), data.payments,
     ['id', 'debtId', 'amount', 'date', 'comment']);
+  if (data.log) {
+    arrayToSheet(ss.getSheetByName(SHEET_LOG), data.log,
+      ['user', 'userName', 'action', 'detail', 'timestamp']);
+  }
 
   const metaSheet = ss.getSheetByName(SHEET_META);
   saveMeta(metaSheet, {

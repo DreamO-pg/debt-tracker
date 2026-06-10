@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Учёт должников</title>
+<title>DebTracker</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -151,6 +151,14 @@ header p{font-size:.8rem;opacity:.8;margin-top:2px}
 .user-label{font-size:.75rem;color:var(--text2);background:var(--primary-light);padding:3px 8px;border-radius:6px;font-weight:600}
 .admin-only{display:none}
 body.is-admin .admin-only{display:initial}
+
+.log-entry{padding:10px 12px;border-bottom:1px solid var(--border);font-size:.82rem;display:flex;gap:10px;align-items:flex-start}
+.log-entry:last-child{border-bottom:none}
+.log-entry .log-time{font-size:.7rem;color:var(--text2);white-space:nowrap;min-width:90px}
+.log-entry .log-user{font-weight:700;font-size:.72rem;padding:2px 6px;border-radius:6px;color:#fff;white-space:nowrap}
+.log-entry .log-text{flex:1;color:var(--text)}
+.log-filters{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.log-filters select{padding:6px 10px;border:2px solid var(--border);border-radius:8px;font-size:.8rem;outline:none}
 </style>
 </head>
 <body>
@@ -158,7 +166,7 @@ body.is-admin .admin-only{display:initial}
 <!-- LOGIN SCREEN -->
 <div id="loginScreen">
   <div class="login-box">
-    <h2>Учёт должников</h2>
+    <h2>DebTracker</h2>
     <p>Выберите пользователя для входа</p>
     <div class="login-users">
       <div class="login-user" onclick="selectUser('admin')">
@@ -185,7 +193,7 @@ body.is-admin .admin-only{display:initial}
 <header>
   <div style="display:flex;justify-content:space-between;align-items:center">
     <div>
-      <h1 style="text-align:left">Учёт должников</h1>
+      <h1 style="text-align:left">DebTracker</h1>
       <p id="headerDate" style="text-align:left"></p>
     </div>
     <div style="text-align:right">
@@ -205,6 +213,7 @@ body.is-admin .admin-only{display:initial}
     <button class="tab active" onclick="showPage('dashboard')">Главная<span id="alertBadge" class="badge" style="display:none"></span></button>
     <button class="tab" onclick="showPage('debts')">Долги</button>
     <button class="tab" onclick="showPage('clients')">Клиенты</button>
+    <button class="tab admin-only" onclick="showPage('journal')">Журнал</button>
   </div>
 
   <!-- DASHBOARD -->
@@ -234,6 +243,29 @@ body.is-admin .admin-only{display:initial}
     </div>
     <div class="search"><input type="text" id="debtSearch" placeholder="Поиск по имени клиента..." oninput="renderDebts()"></div>
     <div id="debtsList" class="debt-list"></div>
+  </div>
+
+  <!-- JOURNAL (admin only) -->
+  <div id="journal" class="page">
+    <div class="card">
+      <h2>Журнал действий</h2>
+      <div class="log-filters">
+        <select id="logUserFilter" onchange="renderJournal()">
+          <option value="all">Все пользователи</option>
+          <option value="admin">Админ</option>
+          <option value="seller1">Продавец 1</option>
+          <option value="seller2">Продавец 2</option>
+        </select>
+        <select id="logActionFilter" onchange="renderJournal()">
+          <option value="all">Все действия</option>
+          <option value="debt">Долги</option>
+          <option value="payment">Оплаты</option>
+          <option value="delete">Удаления</option>
+          <option value="client">Клиенты</option>
+        </select>
+      </div>
+      <div id="journalList"></div>
+    </div>
   </div>
 
   <!-- CLIENTS -->
@@ -445,8 +477,12 @@ function tryAutoLogin() {
 
 function loadDB() {
   const d = localStorage.getItem(DB_KEY);
-  if (d) return JSON.parse(d);
-  return { clients: [], debts: [], payments: [], nextClientId: 1, nextDebtId: 1, nextPayId: 1 };
+  if (d) {
+    const parsed = JSON.parse(d);
+    if (!parsed.log) parsed.log = [];
+    return parsed;
+  }
+  return { clients: [], debts: [], payments: [], log: [], nextClientId: 1, nextDebtId: 1, nextPayId: 1 };
 }
 
 function saveDB(db) {
@@ -498,9 +534,12 @@ function syncFromCloud() {
     .then(r => r.json())
     .then(res => {
       if (res.success && res.data && res.data.clients && res.data.clients.length > 0) {
-        localStorage.setItem(DB_KEY, JSON.stringify(res.data));
+        const local = loadDB();
+        const merged = mergeData(local, res.data);
+        localStorage.setItem(DB_KEY, JSON.stringify(merged));
+        syncToCloud(merged);
         updateSyncStatus('online', 'Облако подключено');
-        return res.data;
+        return merged;
       }
       updateSyncStatus('online', 'Облако подключено (пусто)');
       return null;
@@ -606,10 +645,12 @@ function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => { if (t.textContent.includes(id === 'dashboard' ? 'Главная' : id === 'debts' ? 'Долги' : 'Клиенты')) t.classList.add('active'); });
+  const tabNames = { dashboard: 'Главная', debts: 'Долги', clients: 'Клиенты', journal: 'Журнал' };
+  document.querySelectorAll('.tab').forEach(t => { if (t.textContent.includes(tabNames[id])) t.classList.add('active'); });
   if (id === 'dashboard') renderDashboard();
   if (id === 'debts') renderDebts();
   if (id === 'clients') renderClients();
+  if (id === 'journal') renderJournal();
 }
 
 // ===== DASHBOARD =====
@@ -897,6 +938,7 @@ function saveDebt() {
 
   const debt = { id: db.nextDebtId++, clientId: client.id, amount, createdAt: new Date().toISOString(), dueDate, comment };
   db.debts.push(debt);
+  addLog(db, 'debt', `Записал долг ${fmt(amount)} для ${client.name} (возврат ${fmtDate(dueDate)})`);
   saveDB(db);
 
   closeModal('debtModal');
@@ -918,6 +960,7 @@ function saveClient() {
   if (!name) return alert('Введите имя');
   if (db.clients.find(c => c.name.toLowerCase() === name.toLowerCase())) return alert('Клиент с таким именем уже есть');
   db.clients.push({ id: db.nextClientId++, name, phone, createdAt: new Date().toISOString() });
+  addLog(db, 'client', `Добавил клиента: ${name}`);
   saveDB(db);
   closeModal('clientModal');
   document.getElementById('cName').value = '';
@@ -954,7 +997,10 @@ function savePayment() {
   const d = db.debts.find(x => x.id === payDebtId);
   const remaining = d.amount - getDebtPaid(db, payDebtId);
   if (amount > remaining) return alert(`Сумма превышает остаток (${fmt(remaining)})`);
+  const payDebt = db.debts.find(x => x.id === payDebtId);
+  const payClient = payDebt ? db.clients.find(c => c.id === payDebt.clientId) : null;
   db.payments.push({ id: db.nextPayId++, debtId: payDebtId, amount, date: new Date().toISOString(), comment });
+  addLog(db, 'payment', `Внёс оплату ${fmt(amount)} от ${payClient ? payClient.name : '?'} (долг #${payDebtId})`);
   saveDB(db);
   closeModal('payModal');
   refreshAll();
@@ -977,9 +1023,14 @@ function confirmDelete(type, id) {
 function doDelete(type, id) {
   const db = loadDB();
   if (type === 'debt') {
+    const delDebt = db.debts.find(d => d.id === id);
+    const delClient = delDebt ? db.clients.find(c => c.id === delDebt.clientId) : null;
+    addLog(db, 'delete', `Удалил долг #${id} (${delClient ? delClient.name : '?'}, ${delDebt ? fmt(delDebt.amount) : '?'})`);
     db.debts = db.debts.filter(d => d.id !== id);
     db.payments = db.payments.filter(p => p.debtId !== id);
   } else {
+    const delC = db.clients.find(c => c.id === id);
+    addLog(db, 'delete', `Удалил клиента "${delC ? delC.name : '?'}" и все его долги`);
     const clientDebts = db.debts.filter(d => d.clientId === id).map(d => d.id);
     db.debts = db.debts.filter(d => d.clientId !== id);
     db.payments = db.payments.filter(p => !clientDebts.includes(p.debtId));
@@ -1029,6 +1080,103 @@ function refreshAll() {
     else if (activePage.id === 'debts') renderDebts();
     else if (activePage.id === 'clients') renderClients();
   }
+}
+
+// ===== PHONE MASK =====
+function formatPhone(input) {
+  let digits = input.value.replace(/\D/g, '');
+  if (digits.length === 0) { input.value = ''; return; }
+  if (digits[0] === '8') digits = '7' + digits.slice(1);
+  if (digits[0] !== '7') digits = '7' + digits;
+  let formatted = '+7';
+  if (digits.length > 1) formatted += ' (' + digits.slice(1, 4);
+  if (digits.length >= 4) formatted += ')';
+  if (digits.length > 4) formatted += ' ' + digits.slice(4, 7);
+  if (digits.length > 7) formatted += '-' + digits.slice(7, 9);
+  if (digits.length > 9) formatted += '-' + digits.slice(9, 11);
+  input.value = formatted;
+}
+
+document.addEventListener('input', function(e) {
+  if (e.target.id === 'dPhone' || e.target.id === 'cPhone') formatPhone(e.target);
+});
+
+// ===== ACTIVITY LOG =====
+function addLog(db, action, detail) {
+  if (!db.log) db.log = [];
+  db.log.push({
+    user: currentUser ? currentUser.id : 'unknown',
+    userName: currentUser ? currentUser.name : '?',
+    action: action,
+    detail: detail,
+    timestamp: new Date().toISOString()
+  });
+  if (db.log.length > 500) db.log = db.log.slice(-500);
+}
+
+function renderJournal() {
+  const db = loadDB();
+  const logs = (db.log || []).slice().reverse();
+  const userFilter = document.getElementById('logUserFilter').value;
+  const actionFilter = document.getElementById('logActionFilter').value;
+
+  const filtered = logs.filter(l => {
+    if (userFilter !== 'all' && l.user !== userFilter) return false;
+    if (actionFilter !== 'all' && l.action !== actionFilter) return false;
+    return true;
+  });
+
+  const el = document.getElementById('journalList');
+  if (filtered.length === 0) { el.innerHTML = '<div class="empty">Нет записей</div>'; return; }
+
+  const userColors = { admin: '#1a56db', seller1: '#16a34a', seller2: '#d97706' };
+
+  el.innerHTML = filtered.slice(0, 100).map(l => {
+    const dt = new Date(l.timestamp);
+    const time = dt.toLocaleDateString('ru-RU', {day:'2-digit',month:'2-digit'}) + ' ' + dt.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
+    const color = userColors[l.user] || '#64748b';
+    return `<div class="log-entry">
+      <span class="log-time">${time}</span>
+      <span class="log-user" style="background:${color}">${l.userName || l.user}</span>
+      <span class="log-text">${l.detail}</span>
+    </div>`;
+  }).join('');
+}
+
+// ===== CONFLICT PROTECTION (merge strategy) =====
+function mergeData(local, cloud) {
+  if (!cloud || !cloud.clients) return local;
+
+  const merged = { log: [] };
+
+  function mergeArray(localArr, cloudArr, idField) {
+    const map = new Map();
+    (cloudArr || []).forEach(item => map.set(item[idField], item));
+    (localArr || []).forEach(item => map.set(item[idField], item));
+    return Array.from(map.values());
+  }
+
+  merged.clients = mergeArray(local.clients, cloud.clients, 'id');
+  merged.debts = mergeArray(local.debts, cloud.debts, 'id');
+  merged.payments = mergeArray(local.payments, cloud.payments, 'id');
+
+  const localLogs = local.log || [];
+  const cloudLogs = cloud.log || [];
+  const logSet = new Set();
+  const allLogs = [...cloudLogs, ...localLogs];
+  merged.log = [];
+  allLogs.forEach(l => {
+    const key = l.timestamp + '|' + l.user + '|' + l.action;
+    if (!logSet.has(key)) { logSet.add(key); merged.log.push(l); }
+  });
+  merged.log.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  if (merged.log.length > 500) merged.log = merged.log.slice(-500);
+
+  merged.nextClientId = Math.max(local.nextClientId || 1, cloud.nextClientId || 1);
+  merged.nextDebtId = Math.max(local.nextDebtId || 1, cloud.nextDebtId || 1);
+  merged.nextPayId = Math.max(local.nextPayId || 1, cloud.nextPayId || 1);
+
+  return merged;
 }
 
 // ===== INIT =====
