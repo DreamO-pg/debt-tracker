@@ -413,6 +413,7 @@ body.is-admin .admin-only{display:initial}
 const DB_KEY = 'debtTracker';
 const SYNC_URL_KEY = 'debtTracker_syncUrl';
 const USER_KEY = 'debtTracker_user';
+const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbynrR2HE-QkFiTMv5-UsnQOqRq1PCeH-EAvAD0A524zFn0DicqahVyoJkbiI_KPc0Iu/exec';
 let syncInProgress = false;
 let currentUser = null;
 
@@ -491,7 +492,7 @@ function saveDB(db) {
 }
 
 // ===== CLOUD SYNC =====
-function getSyncUrl() { return localStorage.getItem(SYNC_URL_KEY) || ''; }
+function getSyncUrl() { return localStorage.getItem(SYNC_URL_KEY) || CLOUD_URL; }
 
 function updateSyncStatus(state, text) {
   const dot = document.getElementById('syncDot');
