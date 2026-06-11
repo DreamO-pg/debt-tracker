@@ -229,6 +229,7 @@ body.is-admin .admin-only{display:initial}
     <button class="tab active" onclick="showPage('dashboard')">Главная<span id="alertBadge" class="badge" style="display:none"></span></button>
     <button class="tab" onclick="showPage('debts')">Долги</button>
     <button class="tab" onclick="showPage('clients')">Клиенты</button>
+    <button class="tab" onclick="showPage('analytics')">Аналитика</button>
     <button class="tab admin-only" onclick="showPage('journal')">Журнал</button>
   </div>
 
@@ -236,15 +237,6 @@ body.is-admin .admin-only{display:initial}
   <div id="dashboard" class="page active">
     <div class="stats" id="statsGrid"></div>
     <div class="chart-cards" id="chartCards"></div>
-    <div class="card">
-      <h2>Аналитика по периоду</h2>
-      <div class="period-filter">
-        <select id="periodMonth" onchange="renderPeriodStats()"></select>
-        <select id="periodYear" onchange="renderPeriodStats()"></select>
-      </div>
-      <div class="period-stats" id="periodStats"></div>
-      <div id="carriedList" style="margin-top:12px"></div>
-    </div>
     <div id="alertsContainer"></div>
     <div class="card">
       <h2>Просроченные долги</h2>
@@ -268,6 +260,19 @@ body.is-admin .admin-only{display:initial}
     </div>
     <div class="search"><input type="text" id="debtSearch" placeholder="Поиск по имени клиента..." oninput="renderDebts()"></div>
     <div id="debtsList" class="debt-list"></div>
+  </div>
+
+  <!-- ANALYTICS -->
+  <div id="analytics" class="page">
+    <div class="card">
+      <h2>Аналитика по периоду</h2>
+      <div class="period-filter">
+        <select id="periodMonth" onchange="renderPeriodStats()"></select>
+        <select id="periodYear" onchange="renderPeriodStats()"></select>
+      </div>
+      <div class="period-stats" id="periodStats"></div>
+      <div id="carriedList" style="margin-top:12px"></div>
+    </div>
   </div>
 
   <!-- JOURNAL (admin only) -->
@@ -671,11 +676,12 @@ function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  const tabNames = { dashboard: 'Главная', debts: 'Долги', clients: 'Клиенты', journal: 'Журнал' };
+  const tabNames = { dashboard: 'Главная', debts: 'Долги', clients: 'Клиенты', analytics: 'Аналитика', journal: 'Журнал' };
   document.querySelectorAll('.tab').forEach(t => { if (t.textContent.includes(tabNames[id])) t.classList.add('active'); });
   if (id === 'dashboard') renderDashboard();
   if (id === 'debts') renderDebts();
   if (id === 'clients') renderClients();
+  if (id === 'analytics') { initPeriodFilter(); renderPeriodStats(); }
   if (id === 'journal') renderJournal();
 }
 
@@ -753,10 +759,6 @@ function renderDashboard() {
   const upcoming = db.debts.filter(d => { const dd = daysDiff(d.dueDate); return getDebtStatus(db, d) === 'open' && dd >= 0 && dd <= 7; })
     .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   renderDebtList('upcomingList', upcoming, db);
-
-  // Period filter init
-  initPeriodFilter();
-  renderPeriodStats();
 }
 
 function initPeriodFilter() {
