@@ -152,6 +152,22 @@ header p{font-size:.8rem;opacity:.8;margin-top:2px}
 .admin-only{display:none}
 body.is-admin .admin-only{display:initial}
 
+.period-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.period-filter select{padding:8px 12px;border:2px solid var(--border);border-radius:8px;font-size:.85rem;outline:none;background:var(--card)}
+.period-filter select:focus{border-color:var(--primary)}
+.period-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.period-stat{padding:12px;border-radius:10px;text-align:center}
+.period-stat .ps-label{font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;font-weight:600}
+.period-stat .ps-value{font-size:1.15rem;font-weight:800;margin-top:3px}
+.period-stat.issued{background:#e8edfb}
+.period-stat.issued .ps-value{color:var(--primary)}
+.period-stat.returned{background:var(--success-bg)}
+.period-stat.returned .ps-value{color:var(--success)}
+.period-stat.debtors{background:var(--warn-bg)}
+.period-stat.debtors .ps-value{color:var(--warn)}
+.period-stat.carried{background:var(--danger-bg)}
+.period-stat.carried .ps-value{color:var(--danger)}
+
 .log-entry{padding:10px 12px;border-bottom:1px solid var(--border);font-size:.82rem;display:flex;gap:10px;align-items:flex-start}
 .log-entry:last-child{border-bottom:none}
 .log-entry .log-time{font-size:.7rem;color:var(--text2);white-space:nowrap;min-width:90px}
@@ -220,6 +236,15 @@ body.is-admin .admin-only{display:initial}
   <div id="dashboard" class="page active">
     <div class="stats" id="statsGrid"></div>
     <div class="chart-cards" id="chartCards"></div>
+    <div class="card">
+      <h2>Аналитика по периоду</h2>
+      <div class="period-filter">
+        <select id="periodMonth" onchange="renderPeriodStats()"></select>
+        <select id="periodYear" onchange="renderPeriodStats()"></select>
+      </div>
+      <div class="period-stats" id="periodStats"></div>
+      <div id="carriedList" style="margin-top:12px"></div>
+    </div>
     <div id="alertsContainer"></div>
     <div class="card">
       <h2>Просроченные долги</h2>
@@ -728,6 +753,90 @@ function renderDashboard() {
   const upcoming = db.debts.filter(d => { const dd = daysDiff(d.dueDate); return getDebtStatus(db, d) === 'open' && dd >= 0 && dd <= 7; })
     .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   renderDebtList('upcomingList', upcoming, db);
+
+  // Period filter init
+  initPeriodFilter();
+  renderPeriodStats();
+}
+
+function initPeriodFilter() {
+  const monthSel = document.getElementById('periodMonth');
+  const yearSel = document.getElementById('periodYear');
+  if (monthSel.options.length > 0) return;
+
+  const months = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  const now = new Date();
+  months.forEach((m, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = m;
+    if (i === now.getMonth()) opt.selected = true;
+    monthSel.appendChild(opt);
+  });
+
+  const db = loadDB();
+  const years = new Set();
+  years.add(now.getFullYear());
+  db.debts.forEach(d => { years.add(new Date(d.createdAt).getFullYear()); });
+  Array.from(years).sort().forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    if (y === now.getFullYear()) opt.selected = true;
+    yearSel.appendChild(opt);
+  });
+}
+
+function renderPeriodStats() {
+  const db = loadDB();
+  const month = parseInt(document.getElementById('periodMonth').value);
+  const year = parseInt(document.getElementById('periodYear').value);
+
+  const periodStart = new Date(year, month, 1);
+  const periodEnd = new Date(year, month + 1, 0, 23, 59, 59);
+
+  function inPeriod(dateStr) {
+    const d = new Date(dateStr);
+    return d >= periodStart && d <= periodEnd;
+  }
+
+  const issuedInPeriod = db.debts.filter(d => inPeriod(d.createdAt));
+  const issuedSum = issuedInPeriod.reduce((s, d) => s + d.amount, 0);
+
+  const paidInPeriod = db.payments.filter(p => inPeriod(p.date));
+  const returnedSum = paidInPeriod.reduce((s, p) => s + p.amount, 0);
+
+  const debtorIds = new Set(issuedInPeriod.map(d => d.clientId));
+  const debtorsCount = debtorIds.size;
+
+  const carriedDebts = db.debts.filter(d => {
+    const created = new Date(d.createdAt);
+    return created < periodStart && getDebtStatus(db, d) !== 'closed';
+  });
+  const carriedOver = carriedDebts.length;
+  const carriedSum = carriedDebts.reduce((s, d) => s + (d.amount - getDebtPaid(db, d.id)), 0);
+
+  document.getElementById('periodStats').innerHTML = `
+    <div class="period-stat issued"><div class="ps-label">Выдано за период</div><div class="ps-value">${fmt(issuedSum)}</div><div class="ps-label">${issuedInPeriod.length} долгов</div></div>
+    <div class="period-stat returned"><div class="ps-label">Возвращено за период</div><div class="ps-value">${fmt(returnedSum)}</div><div class="ps-label">${paidInPeriod.length} оплат</div></div>
+    <div class="period-stat debtors"><div class="ps-label">Должников за период</div><div class="ps-value">${debtorsCount}</div><div class="ps-label">взяли в долг</div></div>
+    <div class="period-stat carried"><div class="ps-label">Перешло из прошлых</div><div class="ps-value">${carriedOver} долгов</div><div class="ps-label">на ${fmt(carriedSum)}</div></div>
+  `;
+
+  const carriedListEl = document.getElementById('carriedList');
+  if (carriedDebts.length > 0) {
+    carriedListEl.innerHTML = '<div style="font-size:.8rem;font-weight:700;margin-bottom:6px;color:var(--danger)">Незакрытые долги из прошлых периодов:</div>';
+    carriedDebts.forEach(d => {
+      const client = db.clients.find(c => c.id === d.clientId);
+      const remaining = d.amount - getDebtPaid(db, d.id);
+      carriedListEl.innerHTML += `<div style="font-size:.8rem;padding:4px 0;border-bottom:1px dashed var(--border);display:flex;justify-content:space-between">
+        <span>${client ? client.name : '?'} — с ${fmtDate(d.createdAt)}</span>
+        <span style="font-weight:700;color:var(--danger)">${fmt(remaining)}</span>
+      </div>`;
+    });
+  } else {
+    carriedListEl.innerHTML = '';
+  }
 }
 
 function renderDebtList(containerId, debts, db) {
