@@ -235,8 +235,6 @@ body.is-admin .admin-only{display:initial}
 
   <!-- DASHBOARD -->
   <div id="dashboard" class="page active">
-    <div class="stats" id="statsGrid"></div>
-    <div class="chart-cards" id="chartCards"></div>
     <div id="alertsContainer"></div>
     <div class="card">
       <h2>Просроченные долги</h2>
@@ -688,57 +686,7 @@ function showPage(id) {
 // ===== DASHBOARD =====
 function renderDashboard() {
   const db = loadDB();
-  const activeDebts = db.debts.filter(d => getDebtStatus(db, d) !== 'closed');
   const overdueDebts = db.debts.filter(d => getDebtStatus(db, d) === 'overdue');
-  const totalDebt = activeDebts.reduce((s, d) => s + (d.amount - getDebtPaid(db, d.id)), 0);
-  const totalPaid = db.payments.reduce((s, p) => s + p.amount, 0);
-  const totalIssued = db.debts.reduce((s, d) => s + d.amount, 0);
-
-  document.getElementById('statsGrid').innerHTML = `
-    <div class="stat danger"><div class="label">Общий долг</div><div class="value">${fmt(totalDebt)}</div></div>
-    <div class="stat success"><div class="label">Возвращено</div><div class="value">${fmt(totalPaid)}</div></div>
-    <div class="stat info"><div class="label">Выдано всего</div><div class="value">${fmt(totalIssued)}</div></div>
-    <div class="stat warn"><div class="label">Просрочено</div><div class="value">${overdueDebts.length}</div></div>
-  `;
-
-  // Chart cards
-  const soonDebts = db.debts.filter(d => { const dd = daysDiff(d.dueDate); return getDebtStatus(db, d) === 'open' && dd >= 0 && dd <= 3; });
-  const overdueSum = overdueDebts.reduce((s,d) => s + (d.amount - getDebtPaid(db, d.id)), 0);
-  const soonSum = soonDebts.reduce((s,d) => s + (d.amount - getDebtPaid(db, d.id)), 0);
-  const circumference = 2 * Math.PI * 22;
-  const overduePct = totalDebt > 0 ? overdueSum / totalDebt : 0;
-  const soonPct = totalDebt > 0 ? soonSum / totalDebt : 0;
-  const overdueOffset = circumference * (1 - overduePct);
-  const soonOffset = circumference * (1 - soonPct);
-
-  function ringSvg(pct, offset, color) {
-    return `<svg viewBox="0 0 50 50"><circle class="ring-bg" cx="25" cy="25" r="22"/><circle class="ring-fill" cx="25" cy="25" r="22" stroke="${color}" stroke-dasharray="${circumference.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"/></svg>`;
-  }
-
-  document.getElementById('chartCards').innerHTML = `
-    <div class="chart-card">
-      <div class="ring">
-        ${ringSvg(overduePct, overdueOffset, '#dc2626')}
-        <div class="ring-label" style="color:#dc2626">${overdueDebts.length}</div>
-      </div>
-      <div class="chart-info">
-        <div class="chart-title">Просроченные</div>
-        <div class="chart-value" style="color:#dc2626">${fmt(overdueSum)}</div>
-        <div class="chart-sub">${Math.round(overduePct * 100)}% от общего долга</div>
-      </div>
-    </div>
-    <div class="chart-card">
-      <div class="ring">
-        ${ringSvg(soonPct, soonOffset, '#d97706')}
-        <div class="ring-label" style="color:#d97706">${soonDebts.length}</div>
-      </div>
-      <div class="chart-info">
-        <div class="chart-title">Ближайшие 3 дня</div>
-        <div class="chart-value" style="color:#d97706">${fmt(soonSum)}</div>
-        <div class="chart-sub">${Math.round(soonPct * 100)}% от общего долга</div>
-      </div>
-    </div>
-  `;
 
   // Alerts (risky clients only)
   let alerts = '';
